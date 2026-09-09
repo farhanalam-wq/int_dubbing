@@ -117,9 +117,31 @@ Addressed auditory artifacts in the initial 19-segment full-width synthesis (acc
 4. Preserved clean zero-amplitude silence during the 10.48s intro score and the 3.51s orchestral swell (63.48s - 66.99s).
 Updated master vocal track saved to `data/stage_07_tts/clip001__dubbed_vocal_full.wav`.
 
+### D-017 · Visual Breath-Phrase Anchoring & Pacing Synchronization
+To resolve temporal drift where speech finished 1.5s to 4.0s before the actor closed his mouth on screen:
+1. Segmented the monologue into 14 natural thought clauses anchored to WhisperX acoustic pause timestamps.
+2. Preserved the actor's natural dramatic pauses (e.g. 1.7s contemplative pause after "অর্থাৎ," and 1.8s breath pause before "সত্য অনুধাবন করতে পারি না") as intentional silence on the vocal canvas.
+3. Locked all dialogue synthesis to 1.00x un-stretched speed (zero `atempo` phase distortion) and leveled active speech RMS to ~0.078.
+Updated master vocal track saved to `data/stage_07_tts/clip001__dubbed_vocal_full.wav`.
+
+### D-018 · Stage 11 Dynamic BGM Remix with Sidechain Compression
+Implemented Stage 11 in `scripts/11_remix.py`:
+1. Highpass filtered vocal stem at 80Hz to eliminate proximity resonance.
+2. Deployed FFmpeg `sidechaincompress` (threshold=0.035, ratio=2.2, attack=40ms, release=350ms) to duck the isolated BGM stem by ~3dB during speech delivery while releasing instantly during pauses and orchestral swells.
+3. Summed inputs with unity gain (`normalize=0`) and brickwall peak limited to -1.0 dBFS (actual peak: -2.25 dBFS, 0.7720).
+Output saved to `data/stage_09_remix/clip001__remix__final.wav`.
+
+### D-019 · Stage 12 LatentSync 1.6 on Modal NVIDIA A100-80GB GPU
+Configured ByteDance LatentSync 1.6 on Modal using `gpu="A100-80GB"` with `DeepCache` acceleration. Scaled compute from A10G to A100 80GB to eliminate timeout limits and accelerate 3D UNet latent diffusion across all 2,344 frames (completed in 11m 20s).
+
+### D-020 · LatentSync Face-Fallback Patch for Non-Face Intro Scenes
+Upstream ByteDance LatentSync crashed with `RuntimeError("Face not detected")` on scenery/title shots lacking a detected face (such as the 10.48s flute intro). Patched `ImageProcessor.affine_transform` and `LipsyncPipeline.restore_video` to gracefully pass through original video frames untouched whenever a face is absent, and interpolate momentary single-frame dropouts using previous facial landmarks.
+Output saved to `data/stage_10_lipsync/clip001__lipsync__latentsync.mp4`.
+
+### D-021 · Stage 13 Master Multiplexing & Quality Gate
+Implemented Stage 13 in `scripts/13_mux.py` to replace the lip-synced video's temporary audio stream with the authoritative 48kHz stereo 320kbps remixed master WAV via stream-copy muxing (`-c:v copy -c:a aac -b:a 320k`). Output duration strictly verified at 93.76s matching source footage.
+Final deliverable saved to `data/final/clip001__final.mp4`.
+
 ---
 
 <!-- append new decisions below this line -->
-
-
-
