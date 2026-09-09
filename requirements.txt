@@ -1,0 +1,52 @@
+# Hindi→Bangla Dubbing Pipeline — Python dependencies
+# Pinned to major versions only at experimentation phase.
+# Run: pip install -r requirements.txt
+
+# ── Audio / Video ─────────────────────────────────────────────────────────────
+ffmpeg-python>=0.2          # FFmpeg Python bindings (stages 1, 9, 10, 11, 13)
+soundfile>=0.12             # WAV I/O
+librosa>=0.10               # Audio analysis / RMS QC checks
+numpy>=1.24
+
+# ── Source Separation ─────────────────────────────────────────────────────────
+# UVR + BS-RoFormer: install via the audio-separator package
+audio-separator[cpu]>=0.17  # swap [cpu] for [gpu] on CUDA machines
+# Demucs fallback
+demucs>=4.0
+
+# ── STT ───────────────────────────────────────────────────────────────────────
+# IndicConformer — installed from AI4Bharat; see scripts/03_stt.py for install note
+# IndicWhisper — HF transformers model, loaded via transformers
+transformers>=4.40
+accelerate>=0.29
+datasets>=2.18
+
+# ── Word alignment ────────────────────────────────────────────────────────────
+whisperx>=3.1               # WhisperX (wraps faster-whisper + wav2vec2 alignment)
+
+# ── Diarization ───────────────────────────────────────────────────────────────
+pyannote.audio>=3.1         # pyannote community-1 checkpoint
+
+# ── Translation ───────────────────────────────────────────────────────────────
+# IndicTrans2 installed from source — see scripts/07_translate.py for note
+sentencepiece>=0.1.99       # tokenizer dependency
+sacremoses>=0.1.0
+
+# ── LLM cleanup (stage 8) ─────────────────────────────────────────────────────
+openai>=1.0                 # or swap for google-generativeai / anthropic
+# google-generativeai>=0.5  # uncomment if using Gemini
+
+# ── TTS ───────────────────────────────────────────────────────────────────────
+# DhVaani 0.5 — loaded via HF transformers / custom loader; see scripts/09_tts.py
+# Fish Speech S2 Pro — separate install; see scripts/09_tts.py
+# IndicF5, svara — HF-hosted; loaded via transformers
+
+# ── Lip sync ──────────────────────────────────────────────────────────────────
+# LatentSync 1.6 — separate repo install; see scripts/12_lipsync.py
+# MuseTalk — separate repo install; see scripts/12_lipsync.py
+
+# ── Utilities ─────────────────────────────────────────────────────────────────
+pyyaml>=6.0
+tqdm>=4.66
+loguru>=0.7
+click>=8.1                  # CLI arg parsing for all stage scripts

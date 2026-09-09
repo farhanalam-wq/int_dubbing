@@ -1,0 +1,72 @@
+{
+  "_comment": "Hindi→Bangla mythology glossary. Fixed term mappings enforced by stage 8 cleanup.",
+  "_schema": {
+    "key": "Hindi source term (Devanagari or romanized)",
+    "value": {
+      "bangla": "Fixed Bangla equivalent (Bengali script)",
+      "notes": "Optional: pronunciation note, alternate spellings, context"
+    }
+  },
+  "terms": {
+    "राम": {
+      "bangla": "রাম",
+      "notes": "Deity name — never transliterate phonetically"
+    },
+    "कृष्ण": {
+      "bangla": "কৃষ্ণ",
+      "notes": "Deity name"
+    },
+    "विष्णु": {
+      "bangla": "বিষ্ণু",
+      "notes": "Deity name"
+    },
+    "शिव": {
+      "bangla": "শিব",
+      "notes": "Deity name"
+    },
+    "दुर्गा": {
+      "bangla": "দুর্গা",
+      "notes": "Deity name"
+    },
+    "महाभारत": {
+      "bangla": "মহাভারত",
+      "notes": "Epic title"
+    },
+    "रामायण": {
+      "bangla": "রামায়ণ",
+      "notes": "Epic title"
+    },
+    "धर्म": {
+      "bangla": "ধর্ম",
+      "notes": "Sanskrit loanword — keep tatsam form in Bangla"
+    },
+    "कर्म": {
+      "bangla": "কর্ম",
+      "notes": "Sanskrit loanword"
+    },
+    "अर्जुन": {
+      "bangla": "অর্জুন",
+      "notes": "Character name"
+    },
+    "युधिष्ठिर": {
+      "bangla": "যুধিষ্ঠির",
+      "notes": "Character name"
+    },
+    "भीम": {
+      "bangla": "ভীম",
+      "notes": "Character name"
+    },
+    "द्रोणाचार्य": {
+      "bangla": "দ্রোণাচার্য",
+      "notes": "Character/epithet"
+    },
+    "पितामह": {
+      "bangla": "পিতামহ",
+      "notes": "Epithet for Bhishma"
+    },
+    "सत्यम् शिवम् सुन्दरम्": {
+      "bangla": "সত্যম শিবম সুন্দরম",
+      "notes": "Sanskrit phrase — preserve intact"
+    }
+  }
+}

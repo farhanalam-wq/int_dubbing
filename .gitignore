@@ -1,0 +1,35 @@
+# Model weights — large binary checkpoints, never commit
+models/
+
+# Raw inputs and all intermediate stage artifacts — too large for git
+data/
+
+# Logs runtime output — machine-generated
+logs/
+
+# Python
+__pycache__/
+*.py[cod]
+*.pyo
+.venv/
+venv/
+env/
+*.egg-info/
+dist/
+build/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# IDE
+.vscode/
+.idea/
+*.swp
+
+# Secrets & Environment
+.env
+.env.*
+
+# Agents
+.agents/

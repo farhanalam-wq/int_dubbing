@@ -1,0 +1,40 @@
+[project]
+name = "dubbing"
+version = "0.1.0"
+description = "Hindi→Bangla mythological video dubbing pipeline"
+requires-python = ">=3.14"
+dependencies = [
+    # ── Modal GPU compute ──────────────────────────────────────────────────────
+    "modal>=1.5.5",
+
+    # ── Audio / Video (local — ffmpeg wrapper only; numpy/librosa run in Modal) ─
+    "ffmpeg-python>=0.2",
+
+    # ── Utilities ─────────────────────────────────────────────────────────────
+    "pyyaml>=6.0",
+    "tqdm>=4.66",
+    "loguru>=0.7",
+    "click>=8.1",
+]
+
+[project.optional-dependencies]
+# Heavy ML deps — installed inside Modal image, not locally
+# Listed here for documentation; use `uv add --optional gpu <pkg>` if needed locally
+gpu = [
+    "torch>=2.3",
+    "torchaudio>=2.3",
+    "transformers>=4.40",
+    "accelerate>=0.29",
+    "datasets>=2.18",
+    "whisperx>=3.1",
+    "pyannote.audio>=3.1",
+    "sentencepiece>=0.1.99",
+    "sacremoses>=0.1.0",
+    "audio-separator[gpu]>=0.17",
+    "demucs>=4.0",
+    "openai>=1.0",
+]
+
+[build-system]
+requires = ["uv_build>=0.12.10,<0.13.0"]
+build-backend = "uv_build"

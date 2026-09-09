@@ -1,0 +1,140 @@
+# configs/pipeline.yaml — Single source of truth for all model paths, thresholds, and flags.
+# Stage scripts read from here; never hardcode paths/values in scripts.
+#
+# !! IMPORTANT !!
+# Before first use of any model, verify the checkpoint ID at its HF/GitHub page.
+# Mark verified IDs with [verified] comment; unverified IDs marked [UNVERIFIED — check before use].
+
+# ── Project ──────────────────────────────────────────────────────────────────
+project:
+  source_language: hi        # ISO 639-1; hardcoded for this phase per §0 scope lock
+  target_language: bn        # ISO 639-1
+  clip_id_default: clip001   # used when no --clip-id arg is passed to scripts
+
+# ── Paths ────────────────────────────────────────────────────────────────────
+paths:
+  raw:              data/raw
+  stage_01:         data/stage_01_extracted
+  stage_02:         data/stage_02_separated
+  stage_03:         data/stage_03_transcript
+  stage_04:         data/stage_04_aligned
+  stage_05:         data/stage_05_timeline
+  stage_06:         data/stage_06_translated
+  stage_07:         data/stage_07_tts
+  stage_08:         data/stage_08_duration_fit
+  stage_09:         data/stage_09_remix
+  stage_10:         data/stage_10_lipsync
+  final:            data/final
+  models:           models
+  glossary:         glossary/mythology_glossary.json
+  logs:             logs
+  needs_review:     logs/needs_review.json
+
+# ── Stage 1: Extraction ───────────────────────────────────────────────────────
+extraction:
+  master_sample_rate: 48000   # Hz; stereo master for remix/lipsync
+  master_channels: 2
+  asr_sample_rate: 16000      # Hz; mono copy for ASR engines
+  asr_channels: 1
+
+# ── Stage 2: Source Separation ────────────────────────────────────────────────
+separation:
+  primary: uvr_bs_roformer
+  fallback: demucs
+  # UVR / BS-RoFormer
+  uvr_model_name: "model_bs_roformer_ep_317_sdr_12.9755.ckpt"   # [verified: Viperx 12.97 SDR BS-RoFormer in audio-separator]
+  uvr_output_format: wav
+  # Demucs
+  demucs_model: htdemucs_ft                    # [verified: demucs v4 fine-tuned]
+  demucs_device: cuda                          # change to cpu if no GPU
+  # QC threshold — set empirically on first 5 clips; placeholder value
+  vocal_rms_silence_threshold_db: -50.0        # dBFS; below this = near-silence
+  vocal_silence_max_fraction: 0.20             # >20% silent speech segments → fallback
+
+# ── Stage 3: STT ──────────────────────────────────────────────────────────────
+stt:
+  # Both engines run unconditionally in experimentation phase (§6.1)
+  indicconformer:
+    hf_repo: "ai4bharat/indic-conformer-600m-multilingual"  # [verified: AI4Bharat 600M multilingual conformer]
+    language: hi
+    device: cuda
+  indicwhisper:
+    hf_repo: "openai/whisper-large-v3"                      # [verified: OpenAI Whisper Large v3]
+    language: hi
+    device: cuda
+
+# ── Stage 4: Word Timestamps (WhisperX) ───────────────────────────────────────
+alignment:
+  whisperx_model: large-v3    # base whisperx model used for forced alignment
+  language: hi
+  device: cuda
+  batch_size: 16
+
+# ── Stage 5: Diarization ──────────────────────────────────────────────────────
+diarization:
+  hf_repo: "pyannote/speaker-diarization-community-1"   # [verified: official pyannote community-1 model]
+  hf_token_env: HF_TOKEN            # env var name; export HF_TOKEN=hf_xxx before running
+  min_speakers: 1
+  max_speakers: 10
+
+# ── Stage 7: Translation ──────────────────────────────────────────────────────
+translation:
+  hf_repo: "ai4bharat/indictrans2-indic-indic-1B"   # [verified: AI4Bharat IndicTrans2 1B Indic-to-Indic primary; dist-320M as fallback]
+  src_lang: hin_Deva
+  tgt_lang: ben_Beng
+  device: cuda
+  batch_size: 8
+
+# ── Stage 8: Translation Cleanup ──────────────────────────────────────────────
+cleanup:
+  llm_provider: gemini              # options: gemini | openai | anthropic
+  llm_model: gemini-3.6-flash
+  api_key_env: GEMINI_API_KEY       # env var name
+  # Instruction: constrained to glossary enforcement & Shastric refinement — no free rewriting
+  system_prompt: |
+    You are an expert mythological dialogue editor and translator for Hindi to Bangla historical/mythological epics.
+    Your task is to refine machine-translated Bangla dialogue segments to ensure:
+    1. Strict enforcement of Shastric terms and proper names from the supplied glossary (Tatsama words like রাম, কৃষ্ণ, ধর্ম, কর্ম, হৃদয়, স্মরণ).
+    2. Elimination of machine translation artifacts (e.g. English transliterations like "ইন লাইফ" -> "জীবনে", or robotic phrasing).
+    3. Elevated Shastric tone suitable for epic narration (Mahabharat/Puranic register) while strictly preserving sentence meaning and timing/length.
+    4. Do NOT freely rewrite or paraphrase beyond what is necessary to fix grammar, tone, and glossary adherence.
+
+
+# ── Stage 9: TTS ──────────────────────────────────────────────────────────────
+tts:
+  bake_off_segments:
+    - "clip001_seg001"   # neutral philosophical statement (~1.8s)
+    - "clip001_seg002"   # high-emotion theatrical declamation (~4.8s)
+  dhvaani:
+    hf_repo: "ARTPARK-IISc/DhVaani-0.5"            # [verified: ZipVoice 123M flow-matching 27 Indic langs]
+    output_sample_rate: 24000
+    speed_param: 1.0                                # native duration control knob
+  fishspeech:
+    hf_repo: "fishaudio/s2-pro"                    # [verified: Dual-AR Qwen3 backbone with inline emotion tags]
+    output_sample_rate: 44100
+  indicf5:
+    hf_repo: "ai4bharat/IndicF5"                   # [verified: AI4Bharat Flow-matching Indic TTS]
+    output_sample_rate: 24000
+  svara:
+    hf_repo: "kenpath/svara-tts-voiceclone-beta"   # [verified: Kenpath Labs 19 Indic langs with emotion tags]
+    output_sample_rate: 24000
+
+# ── Stage 10: Duration Fit ────────────────────────────────────────────────────
+duration_fit:
+  tolerance_ms: 150             # within ±150ms → accept native output as-is
+  atempo_min: 0.85              # never stretch below 0.85x
+  atempo_max: 1.15              # never stretch above 1.15x
+  # If required correction exceeds bounds → flag needs_review, do NOT force stretch
+
+# ── Stage 12: Lip Sync ────────────────────────────────────────────────────────
+lipsync:
+  primary: latentsync
+  fallback: musetalk
+  # Toggle at runtime via --use-musetalk flag on script 12 (§4.4)
+  latentsync:
+    repo: "bytedance/LatentSync"    # [UNVERIFIED — verify LatentSync 1.6 exact repo]
+    version: "1.6"
+    device: cuda
+  musetalk:
+    repo: "TMElyralab/MuseTalk"     # [UNVERIFIED — verify MuseTalk repo]
+    device: cuda
