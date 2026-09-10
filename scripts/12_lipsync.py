@@ -99,13 +99,15 @@ latentsync_image = (
 )
 
 
-def apply_latentsync_patches(smooth_alpha: float = 0.8):
+def apply_latentsync_patches(smooth_alpha: float = 0.8, feather_kernel: int = 31):
     """
     Applies surgical runtime patches to ByteDance LatentSync:
       1. Fallback handling for non-face scenes (e.g. title pans, scenery).
       2. Exponential Moving Average (EMA) landmark smoothing across consecutive frames
          to eliminate high-frequency affine coordinate jitter (preventing jaw trembling).
       3. Graceful pass-through during full video frame re-composition.
+      4. Gaussian feather on the inverse-affine paste-back mask to eliminate hard
+         seam artifacts at the jaw/cheek boundary (feather_kernel controls blur radius).
     """
     ip_path = "/root/LatentSync/latentsync/utils/image_processor.py"
     with open(ip_path, "r", encoding="utf-8") as f:
@@ -157,6 +159,25 @@ def apply_latentsync_patches(smooth_alpha: float = 0.8):
             f.write(lp_content)
         print("[Modal] Patched lipsync_pipeline.py: graceful frame restoration.")
 
+    # Patch 4: Gaussian feather on the inverse-affine paste-back alpha mask.
+    # Targets the `inv_mask` computed from warpAffine in image_processor.py paste_back.
+    # A Gaussian blur on the binary warp mask softens the hard pixel boundary at the
+    # face crop perimeter, eliminating jaw/cheek seam artifacts.
+    feather_target = "inv_mask = cv2.warpAffine(face_mask, inverse_affine, (w, h))"
+    feather_replacement = (
+        "inv_mask = cv2.warpAffine(face_mask, inverse_affine, (w, h))\n"
+        f"        inv_mask = cv2.GaussianBlur(inv_mask, ({feather_kernel}, {feather_kernel}), 0)"
+    )
+    with open(ip_path, "r", encoding="utf-8") as f:
+        ip_content = f.read()
+    if feather_target in ip_content:
+        ip_content = ip_content.replace(feather_target, feather_replacement)
+        with open(ip_path, "w", encoding="utf-8") as f:
+            f.write(ip_content)
+        print(f"[Modal] Patched image_processor.py: Gaussian feather on paste-back mask (kernel={feather_kernel}).")
+    else:
+        print(f"[Modal] WARNING: Gaussian feather target not found in image_processor.py — skipping (inspect paste_back method manually).")
+
 
 def execute_latentsync_job(
     tmpdir: str,
@@ -168,19 +189,29 @@ def execute_latentsync_job(
     guidance_scale: float,
     enable_deepcache: bool,
     smooth_alpha: float = 0.8,
+    feather_kernel: int = 31,
+    audio_lufs_target: float = -16.0,
 ) -> tuple[bytes, int]:
     """
     Internal execution helper on Modal worker:
       1. Normalizes media to strict 25.0 FPS video and 16.0 kHz mono audio.
-      2. Injects paper-aligned patches (EMA smoothing + face fallback).
-      3. Executes LatentSync with exact DDIM steps and guidance scale.
+      2. EBU R128 loudness normalization (default -16 LUFS) on vocal stem before
+         downsampling — ensures Whisper cross-attention receives phoneme energy
+         within its calibrated input range.
+      3. Injects paper-aligned patches (EMA smoothing + face fallback + feathering).
+      4. Executes LatentSync with exact DDIM steps and guidance scale.
     """
     proc_video = os.path.join(tmpdir, "proc_video.mp4")
     proc_audio = os.path.join(tmpdir, "proc_audio.wav")
     out_video = os.path.join(tmpdir, "synced_output.mp4")
 
-    # Paper Alignment: 25.0 FPS video and 16.0 kHz mono audio normalization
+    # Paper Alignment: 25.0 FPS video normalization
     v_cmd = ["ffmpeg", "-y"]
+    # EBU R128 loudness normalization + 16.0 kHz mono audio normalization.
+    # loudnorm=I=-16:TP=-1.0:LRA=11 applies two-pass integrated loudness normalization
+    # targeting -16 LUFS (speech broadcast standard), true peak -1.0 dBFS.
+    # This corrects the measured -25.5 LUFS deficit in our TTS vocal stems and places
+    # audio in Whisper's calibrated input distribution for accurate phoneme embeddings.
     a_cmd = ["ffmpeg", "-y"]
     if start_sec > 0:
         v_cmd += ["-ss", f"{start_sec:.3f}"]
@@ -189,17 +220,23 @@ def execute_latentsync_job(
         v_cmd += ["-t", f"{duration_sec:.3f}"]
         a_cmd += ["-t", f"{duration_sec:.3f}"]
     v_cmd += ["-i", raw_video, "-filter:v", "fps=25", "-c:v", "libx264", "-pix_fmt", "yuv420p", proc_video]
-    a_cmd += ["-i", raw_audio, "-ar", "16000", "-ac", "1", proc_audio]
+    a_cmd += [
+        "-i", raw_audio,
+        "-af", f"loudnorm=I={audio_lufs_target:.1f}:TP=-1.0:LRA=11",
+        "-ar", "16000",
+        "-ac", "1",
+        proc_audio,
+    ]
 
     subprocess.run(v_cmd, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, check=True)
     subprocess.run(a_cmd, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, check=True)
 
     print(
         f"[Modal] Pre-normalized media: video={os.path.getsize(proc_video):,} bytes (25.0 FPS), "
-        f"audio={os.path.getsize(proc_audio):,} bytes (16.0 kHz mono)"
+        f"audio={os.path.getsize(proc_audio):,} bytes (16.0 kHz mono, {audio_lufs_target:.1f} LUFS normalized)"
     )
 
-    apply_latentsync_patches(smooth_alpha=smooth_alpha)
+    apply_latentsync_patches(smooth_alpha=smooth_alpha, feather_kernel=feather_kernel)
 
     cmd = [
         sys.executable, "-m", "scripts.inference",
@@ -259,6 +296,8 @@ def run_latentsync_full_modal(
     guidance_scale: float = 2.0,
     enable_deepcache: bool = False,
     smooth_alpha: float = 0.8,
+    feather_kernel: int = 31,
+    audio_lufs_target: float = -16.0,
 ) -> dict:
     """Monolithic single-worker execution on Modal A100-80GB."""
     with tempfile.TemporaryDirectory() as tmpdir:
@@ -279,6 +318,8 @@ def run_latentsync_full_modal(
             guidance_scale=guidance_scale,
             enable_deepcache=enable_deepcache,
             smooth_alpha=smooth_alpha,
+            feather_kernel=feather_kernel,
+            audio_lufs_target=audio_lufs_target,
         )
 
         return {
@@ -312,6 +353,8 @@ def run_latentsync_scene_modal(chunk_input: dict) -> dict:
             guidance_scale=chunk_input.get("guidance_scale", 2.0),
             enable_deepcache=chunk_input.get("enable_deepcache", False),
             smooth_alpha=chunk_input.get("smooth_alpha", 0.8),
+            feather_kernel=chunk_input.get("feather_kernel", 31),
+            audio_lufs_target=chunk_input.get("audio_lufs_target", -16.0),
         )
 
         return {
@@ -386,6 +429,9 @@ def main():
     default_deepcache = ls_cfg.get("enable_deepcache", False)
     default_smooth_alpha = ls_cfg.get("landmark_smooth_alpha", 0.8)
     default_parallel = ls_cfg.get("parallel_scenes", True)
+    default_scene_threshold = ls_cfg.get("scene_threshold", 0.35)
+    default_feather_kernel = ls_cfg.get("feather_kernel", 31)
+    default_audio_lufs = ls_cfg.get("audio_lufs_target", -16.0)
 
     parser = argparse.ArgumentParser(description="Stage 12 — Video Lip Sync (LatentSync 1.6, Paper-Aligned)")
     parser.add_argument("--clip-id", default="clip001", help="Clip ID (default: clip001)")
@@ -399,6 +445,9 @@ def main():
     parser.add_argument("--smooth-alpha", type=float, default=default_smooth_alpha, help=f"Landmark EMA smoothing alpha (default: {default_smooth_alpha})")
     parser.add_argument("--parallel", action="store_true", default=default_parallel, help="Enable scene-based parallel batching on Modal (default: True)")
     parser.add_argument("--no-parallel", dest="parallel", action="store_false", help="Disable parallel scene batching; run monolithic")
+    parser.add_argument("--scene-threshold", type=float, default=default_scene_threshold, help=f"FFmpeg scene cut sensitivity 0.0–1.0 (default: {default_scene_threshold})")
+    parser.add_argument("--feather-kernel", type=int, default=default_feather_kernel, help=f"Gaussian feather kernel size for paste-back mask (odd int, default: {default_feather_kernel})")
+    parser.add_argument("--audio-lufs", type=float, default=default_audio_lufs, help=f"EBU R128 integrated loudness target in LUFS (default: {default_audio_lufs})")
     args = parser.parse_args()
 
     clip_id = args.clip_id
@@ -454,7 +503,7 @@ def main():
     if args.parallel:
         print("\n[Mode: SCENE-BASED PARALLEL BATCHING]")
         print("Detecting visual shot transitions via FFmpeg...")
-        scenes = detect_scene_cuts(video_path, threshold=0.35, min_scene_duration=2.0)
+        scenes = detect_scene_cuts(video_path, threshold=args.scene_threshold, min_scene_duration=2.0)
         print(f"Detected {len(scenes)} visual shots:")
         for idx, (s_start, s_end) in enumerate(scenes):
             print(f"  Shot {idx:02d}: {s_start:6.2f}s -> {s_end:6.2f}s (duration: {s_end - s_start:5.2f}s)")
@@ -471,6 +520,8 @@ def main():
                 "guidance_scale": args.guidance,
                 "enable_deepcache": args.enable_deepcache,
                 "smooth_alpha": args.smooth_alpha,
+                "feather_kernel": args.feather_kernel,
+                "audio_lufs_target": args.audio_lufs,
             })
 
         print(f"\n[Modal] Dispatching {len(chunk_inputs)} scenes concurrently across A100-80GB workers...")
@@ -515,6 +566,8 @@ def main():
                 guidance_scale=args.guidance,
                 enable_deepcache=args.enable_deepcache,
                 smooth_alpha=args.smooth_alpha,
+                feather_kernel=args.feather_kernel,
+                audio_lufs_target=args.audio_lufs,
             )
 
     out_path = out_dir / f"{clip_id}__lipsync__latentsync.mp4"

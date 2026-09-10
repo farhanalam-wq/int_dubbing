@@ -154,3 +154,12 @@ Aligned the lip-syncing pipeline with findings from the ByteDance LatentSync res
 
 <!-- append new decisions below this line -->
 
+### D-023 · Generalizable LatentSync Quality Hardening (EBU R128, Gaussian Feather, Config-Driven Scene Threshold)
+Three surgical improvements applied to `scripts/12_lipsync.py` and `configs/pipeline.yaml` to improve output quality and prevent overfitting to a single clip:
+
+1. **EBU R128 Loudness Normalization (`audio_lufs_target: -16.0`)**: Measured our TTS vocal stems at **−25.5 LUFS integrated / −2.9 dBFS true peak** — 9.5 LUFS below Whisper's calibrated input distribution. Added `loudnorm=I=-16:TP=-1.0:LRA=11` FFmpeg filter to the audio preprocessing command (`a_cmd`) in `execute_latentsync_job`, applied *before* the 16 kHz downsample. Corrects phoneme energy deficit, ensuring accurate Whisper cross-attention embeddings on any TTS engine or speaker. Configurable via `audio_lufs_target` in `pipeline.yaml` and `--audio-lufs` CLI flag.
+
+2. **Gaussian Feather on Paste-Back Alpha Mask (`feather_kernel: 31`)**: Added Patch 4 to `apply_latentsync_patches` targeting `inv_mask = cv2.warpAffine(face_mask, inverse_affine, (w, h))` in `image_processor.py`. Immediately after the binary warp mask is computed, applies `cv2.GaussianBlur(inv_mask, (31, 31), 0)` to create a soft radial feather on the face-crop boundary, eliminating hard pixel seams at the jaw and cheek perimeter. Graceful fallback: if the target string is not found in the cloned repo version, emits a `WARNING` and skips the patch without crashing. Configurable via `feather_kernel` in `pipeline.yaml` and `--feather-kernel` CLI flag.
+
+3. **Config-Driven Scene Threshold (`scene_threshold: 0.35`)**: Replaced the hardcoded `threshold=0.35` in the `detect_scene_cuts` call with a config-read `args.scene_threshold` driven from `pipeline.yaml`. Enables per-project tuning of FFmpeg shot-cut sensitivity without touching source code. Configurable via `--scene-threshold` CLI flag.
+

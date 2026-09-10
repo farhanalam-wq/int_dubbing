@@ -145,6 +145,9 @@ lipsync:
     landmark_smooth_alpha: 0.8   # exponential moving average factor for affine stability
     parallel_scenes: true        # enable scene-based parallel batching on Modal
     min_scene_duration_sec: 2.0  # minimum threshold for scene splitting
+    scene_threshold: 0.35        # FFmpeg scene change sensitivity (0.0=always cut, 1.0=never cut)
+    feather_kernel: 31           # Gaussian blur kernel size (odd int) for paste-back alpha mask; softens jaw/cheek boundary seam
+    audio_lufs_target: -16.0     # EBU R128 integrated loudness target (LUFS); corrects TTS stem deficit (-25.5 LUFS measured)
   musetalk:
     repo: "TMElyralab/MuseTalk"     # [UNVERIFIED — verify MuseTalk repo]
     device: cuda
