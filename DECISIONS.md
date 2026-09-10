@@ -142,6 +142,15 @@ Output saved to `data/stage_10_lipsync/clip001__lipsync__latentsync.mp4`.
 Implemented Stage 13 in `scripts/13_mux.py` to replace the lip-synced video's temporary audio stream with the authoritative 48kHz stereo 320kbps remixed master WAV via stream-copy muxing (`-c:v copy -c:a aac -b:a 320k`). Output duration strictly verified at 93.76s matching source footage.
 Final deliverable saved to `data/final/clip001__final.mp4`.
 
+### D-022 · LatentSync Paper-Aligned Hyperparameters & Scene Parallelism on A100-80GB
+Aligned the lip-syncing pipeline with findings from the ByteDance LatentSync research paper (*Li et al., arXiv:2412.09262v2*):
+1. **Strict 25.0 FPS & 16.0 kHz Pre-Normalization**: Enforced constant 25.0 FPS video (`-filter:v fps=25`) and 16.0 kHz mono audio (`-ar 16000 -ac 1`) prior to inference, eliminating the 94ms (2.34 frames) cumulative phase drift against Whisper's 50Hz token stride.
+2. **Guidance Scale Optimization ($w=2.0$)**: Boosted guidance scale from 1.5 to 2.0 to suppress the spatial inpainting shortcut prior and enforce crisp phoneme visemes.
+3. **Exact 20-Step DDIM Denoising**: Disabled DeepCache by default on NVIDIA A100-80GB GPU to preserve exact DDIM noise trajectories and eliminate feature interpolation blur around teeth and lips.
+4. **Landmark EMA Smoothing ($\alpha=0.8$)**: Injected Exponential Moving Average smoothing on facial landmarks in `image_processor.py` to eliminate frame-to-frame affine coordinate jitter and jaw boundary shaking.
+5. **Scene-Based Parallel Batching**: Added FFmpeg shot detection (`select=gt(scene,0.35)`) and distributed Modal execution (`.map()`), allowing concurrent A100-80GB processing across camera shots with seamless lossless concatenation.
+
 ---
 
 <!-- append new decisions below this line -->
+

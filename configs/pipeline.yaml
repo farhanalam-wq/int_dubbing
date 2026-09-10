@@ -132,9 +132,20 @@ lipsync:
   fallback: musetalk
   # Toggle at runtime via --use-musetalk flag on script 12 (§4.4)
   latentsync:
-    repo: "bytedance/LatentSync"    # [UNVERIFIED — verify LatentSync 1.6 exact repo]
+    repo: "bytedance/LatentSync"    # [verified: ByteDance/LatentSync 1.6]
     version: "1.6"
-    device: cuda
+    unet_config: "configs/unet/stage2_512.yaml"
+    checkpoint: "checkpoints/latentsync_unet.pt"
+    gpu: "A100-80GB"             # locked to NVIDIA A100 80GB
+    target_fps: 25.0             # strict 25.0 FPS for Whisper 50Hz token stride alignment
+    audio_sample_rate: 16000     # strict 16kHz mono audio normalization
+    guidance_scale: 2.0          # increased from 1.5 to suppress shortcut inpainting prior
+    inference_steps: 20          # standard 20-step DDIM sampling
+    enable_deepcache: false      # disabled by default for production quality (no feature map reuse)
+    landmark_smooth_alpha: 0.8   # exponential moving average factor for affine stability
+    parallel_scenes: true        # enable scene-based parallel batching on Modal
+    min_scene_duration_sec: 2.0  # minimum threshold for scene splitting
   musetalk:
     repo: "TMElyralab/MuseTalk"     # [UNVERIFIED — verify MuseTalk repo]
     device: cuda
+

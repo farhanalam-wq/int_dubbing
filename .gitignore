@@ -33,3 +33,8 @@ Thumbs.db
 
 # Agents
 .agents/
+/paper
+scenes.md
+manim_dubbing_explainer.py
+render_explainer_modal.py
+kaspersky_ca.pem
